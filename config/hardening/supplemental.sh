@@ -3,15 +3,35 @@
 # Last update was 13 May 2017
 #
 # Script: suplemental.sh (system-hardening)
-# Description: Supplemental Hardening 
+# Description: Supplemental Hardening
 # License: GPLv2
 # Copyright: Frank Caviggia, 2016
-# Author: Frank Caviggia <fcaviggi (at) gmail.com>
+# Author: Frank Caviggia <fcaviggi (at) gmail.com>\
+# Patch 16:
+# Remove duplicate SSG audit rules from supplemental.sh
+#
+# While the performance impact of duplicate rules is probably minimal,
+# a duplicate rule can cause rule loading to abort and leave important
+# events unaudited.
+#
+# In particular we were seeing that the duplicate MAC-policy watch on
+# /etc/selinux was halting rule processing after loading only about 80%
+# of the configured rules.
+#
+# We also noticed that while remediating a system the SSG would leave
+# some rules in a file simply named ".rules" that would be excluded when
+# augenrules compiled the final rules file.
+#
+# Additionally the SSG is sometimes generating invalid rules with misspelled
+# exit conditions: EACCESS instead of EACCES and EPRM instead of EPERM.
+# This bug should be fixed in scap-security-guide 0.1.34.
 
+
+#. !please_edit_me
 ########################################
 # LEGAL BANNER CONFIGURATION
 ########################################
-BANNER_MESSAGE_TEXT='You are accessing a U.S. Government (USG) Information System (IS) that is \nprovided for USG-authorized use only. By using this IS (which includes any \ndevice attached to this IS), you consent to the following conditions:\n\n-The USG routinely intercepts and monitors communications on this IS for \npurposes including, but not limited to, penetration testing, COMSEC monitoring, \nnetwork operations and defense, personnel misconduct (PM), law enforcement \n(LE), and counterintelligence (CI) investigations.\n\n-At any time, the USG may inspect and seize data stored on this IS.\n\n-Communications using, or data stored on, this IS are not private, are subject \nto routine monitoring, interception, and search, and may be disclosed or used \nfor any USG-authorized purpose.\n\n-This IS includes security measures (e.g., authentication and access controls) \nto protect USG interests -- not for your personal benefit or privacy.\n\n-Notwithstanding the above, using this IS does not constitute consent to PM, LE \nor CI investigative searching or monitoring of the content of privileged \ncommunications, or work product, related to personal representation or services \nby attorneys, psychotherapists, or clergy, and their assistants. Such \ncommunications and work product are private and confidential. See User \nAgreement for details.\n\n'
+BANNER_MESSAGE_TEXT='You are accessing an Information System (IS) that is \nprovided for authorized use only. By using this IS (which includes any \ndevice attached to this IS), you consent to the following conditions:\n\n-The Owner might routinely intercept and monitor communications on this IS for \npurposes including, but not limited to, penetration testing, COMSEC monitoring, \nnetwork operations and defense, personnel misconduct (PM), law enforcement \n(LE), and counterintelligence (CI) investigations.\n\n-At any time, the Owner may inspect and seize data stored on this IS.\n\n-Communications using, or data stored on, this IS are not private, are subject \nto routine monitoring, interception, and search, and may be disclosed or used \nfor any Owner-authorized purpose.\n\n-This IS includes security measures (e.g., authentication and access controls) \nto protect Owner`s interests -- not for your personal benefit or privacy.\n\n-Notwithstanding the above, using this IS does not constitute consent to PM, LE \nor CI investigative searching or monitoring of the content of privileged \ncommunications, or work product, related to personal representation or services \nby attorneys, psychotherapists, or clergy, and their assistants. Such \ncommunications and work product are private and confidential. See User \nAgreement(available upon request) for details.\n\n'
 echo -e "${BANNER_MESSAGE_TEXT}" > /etc/issue
 echo -e "${BANNER_MESSAGE_TEXT}" > /etc/issue.net
 
@@ -50,6 +70,18 @@ session required pam_unix.so
 EOF
 ln -sf /etc/pam.d/system-auth-local /etc/pam.d/system-auth
 cp -f /etc/pam.d/system-auth-local /etc/pam.d/system-auth-ac
+### alternatively  use CIS reqs
+## CIS 6.3.3
+#system_auth='/etc/pam.d/system-auth'
+#content="$(egrep -v "^#|^auth" ${system_auth})"
+#echo -e "auth required pam_env.so
+#auth sufficient pam_unix.so remember=5
+#auth required pam_faillock.so preauth audit silent deny=5 unlock_time=900
+#auth [success=1 default=bad] pam_unix.so
+#auth [default=die] pam_faillock.so authfail audit deny=5 unlock_time=900
+#auth sufficient pam_faillock.so authsucc audit deny=5 unlock_time=900
+#auth required pam_deny.so\n$content" > ${system_auth}
+
 
 cat <<EOF > /etc/pam.d/password-auth-local
 #%PAM-1.0
@@ -84,6 +116,18 @@ EOF
 ln -sf /etc/pam.d/password-auth-local /etc/pam.d/password-auth
 cp -f /etc/pam.d/password-auth-local /etc/pam.d/password-auth-ac
 
+### alternatively  use CIS reqs
+## CIS 6.3.3
+#content="$(egrep -v "^#|^auth" /etc/pam.d/password-auth)"
+#echo -e "auth required pam_env.so
+#auth required pam_faillock.so preauth audit silent deny=5 unlock_time=900
+#auth [success=1 default=bad] pam_unix.so
+#auth [default=die] pam_faillock.so authfail audit deny=5 unlock_time=900
+#auth sufficient pam_faillock.so authsucc audit deny=5 unlock_time=900
+#auth required pam_deny.so\n$content" > /etc/pam.d/password-auth
+
+
+# CIS 6.3.2
 cat <<EOF > /etc/security/pwquality.conf
 # Configuration for systemwide password quality limits
 # Defaults:
@@ -143,8 +187,72 @@ maxclassrepeat = 2
 # dictpath =
 EOF
 
-echo -e "FAIL_DELAY\t4" >> /etc/login.defs
+### altenatively edit existing file
+## CIS 6.3.2
+#pwqual='/etc/security/pwquality.conf'
+#sed -i 's/^# minlen =.*$/minlen = 14/' ${pwqual}
+#sed -i 's/^# dcredit =.*$/dcredit = -1/' ${pwqual}
+#sed -i 's/^# ucredit =.*$/ucredit = -1/' ${pwqual}
+#sed -i 's/^# ocredit =.*$/ocredit = -1/' ${pwqual}
+#sed -i 's/^# lcredit =.*$/lcredit = -1/' ${pwqual}
 
+
+login_defs=/etc/login.defs
+echo -e "FAIL_DELAY\t4" >> ${login_defs}
+
+#sed -i 's/^PASS_MAX_DAYS.*$/PASS_MAX_DAYS 90/' ${login_defs}		# CIS 7.1.1
+#sed -i 's/^PASS_MIN_DAYS.*$/PASS_MIN_DAYS 7/' ${login_defs}		# CIS 7.1.2
+#sed -i 's/^PASS_WARN_AGE.*$/PASS_WARN_AGE 7/' ${login_defs}		# CIS 7.1.3
+
+root_gid="$(id -g root)"
+if [[ "${root_gid}" -ne 0 ]] ; then
+  usermod -g 0 root							# CIS 7.3
+fi
+
+
+# CIS 7.4
+bashrc='/etc/bashrc'
+#first umask cmd sets it for users, second umask cmd sets it for system reserved uids
+#we want to alter the first one
+line_num=$(grep -n "^[[:space:]]*umask" ${bashrc} | head -1 | cut -d: -f1)
+sed -i ${line_num}s/002/077/ ${bashrc}
+cat << EOF >> /etc/profile.d/cis.sh
+#!/bin/bash
+
+umask 077
+EOF
+
+[[ -w /etc/issue ]] && rm /etc/issue
+[[ -w /etc/issue.net ]] && rm /etc/issue.net
+touch /etc/issue /etc/issue.net
+chown root:root /etc/issue /etc/issue.net
+chmod 644 /etc/issue /etc/issue.net
+
+grub_cfg='/boot/grub2/grub.cfg'
+chown root:root ${grub_cfg}					# CIS 1.5.1
+chmod 600 ${grub_cfg}						# CIS 1.5.2
+chmod 644 /etc/passwd						# CIS 9.1.2
+chmod 000 /etc/shadow						# CIS 9.1.3
+chmod 000 /etc/gshadow						# CIS 9.1.4
+chmod 644 /etc/group						# CIS 9.1.5
+chown root:root /etc/passwd					# CIS 9.1.6
+chown root:root /etc/shadow					# CIS 9.1.7
+chown root:root /etc/gshadow				# CIS 9.1.8
+chown root:root /etc/group					# CIS 9.1.9
+
+
+
+
+
+# CIS 6.5
+pam_su='/etc/pam.d/su'
+line_num="$(grep -n "^\#auth[[:space:]]*required[[:space:]]*pam_wheel.so[[:space:]]*use_uid" ${pam_su} | cut -d: -f1)"
+sed -i "${line_num} a auth		required	pam_wheel.so use_uid" ${pam_su}
+usermod -G wheel root
+
+# CIS 9.2.6 If /root/bin doesn't exist we fail this check I'm electing to change /root/.bash_profile
+# Just adding a /root/bin dir may be better
+sed -i 's/^PATH.*$/PATH=\$PATH/' /root/.bash_profile
 
 cat <<EOF > /etc/ntp.conf
 # by default act only as a basic NTP client
@@ -161,14 +269,46 @@ maxpoll 17
 #server time.example.net
 EOF
 
+## altenatively edit existing default config:
+#ntp_conf='/etc/ntp.conf'
+#sed -i "s/^restrict default/restrict default kod/" ${ntp_conf}
+#line_num="$(grep -n "^restrict default" ${ntp_conf} | cut -f1 -d:)"
+#sed -i "${line_num} a restrict -6 default kod nomodify notrap nopeer noquery" ${ntp_conf}
+#sed -i s/'^OPTIONS="-g"'/'OPTIONS="-g -u ntp:ntp -p \/var\/run\/ntpd.pid"'/ /etc/sysconfig/ntpd
+
+auditd_conf='/etc/audit/auditd.conf'
+# CIS 5.2.1.1 Configure Audit Log Storage Size
+sed -i 's/^max_log_file .*$/max_log_file = 1024/' ${auditd_conf}
+# CIS 5.2.1.2 Disable system on Audit Log Full - This is VERY environment specific (and likely controversial)
+sed -i 's/^space_left_action.*$/space_left_action = email/' ${auditd_conf}
+sed -i 's/^action_mail_acct.*$/action_mail_acct = root/' ${auditd_conf}
+sed -i 's/^admin_space_left_action.*$/admin_space_left_action = halt/' ${auditd_conf}
+# CIS 5.2.1.3 Keep All Auditing Information
+sed -i 's/^max_log_file_action.*$/max_log_file_action = keep_logs/' ${auditd_conf}
+
+# CIS 6.1.2-6.1.9
+chown root:root /etc/anacrontab	/etc/crontab /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly /etc/cron.d
+chmod 600 /etc/anacrontab /etc/crontab /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly /etc/cron.d
+
+# CIS 6.1.10 + 6.1.11
+[[ -w /etc/at.deny ]] && rm /etc/at.deny
+[[ -w /etc/cron.deny ]] && rm /etc/cron.deny
+touch /etc/at.allow /etc/cron.allow
+chown root:root /etc/at.allow /etc/cron.allow
+chmod 600 /etc/at.allow /etc/cron.allow
+
 ########################################
 # STIG Audit Configuration
 ########################################
-cat <<EOF > /etc/audit/rules.d/audit.rules
-# DISA STIG Audit Rules
-## Add keys to the audit rules below using the -k option to allow for more 
-## organized and quicker searches with the ausearch tool.  See auditctl(8) 
-## and ausearch(8) for more information.
+cat <<EOF > /etc/audit/rules.d/zzz-supplemental.rules
+# augenrules is a script that merges all component audit rules files;
+# The last processed -D directive without an option, if present, is
+# always emitted as the first line in the resultant file. Those with an
+# option are replicated in place.  The last processed -b directive, if
+# present, is always emitted as the second line in the resultant file.
+# The last processed -f directive, if present, is always emitted as the
+# third line in the resultant file.  The last processed -e directive,
+# if present, is always emitted as the last line in the resultant file.
 
 # Remove any existing rules
 -D
@@ -178,6 +318,9 @@ cat <<EOF > /etc/audit/rules.d/audit.rules
 
 # Failure of auditd causes a kernel panic
 -f 2
+
+# Make the auditd Configuration Immutable
+-e 2
 
 ###########################
 ## DISA STIG Audit Rules ##
@@ -261,9 +404,33 @@ cat <<EOF > /etc/audit/rules.d/audit.rules
 # Watch sshd configuration
 -w /etc/ssh/sshd_config
 
+# Audit time
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -k time-change
+-a always,exit -F arch=b32 -S adjtimex -S settimeofday -S stime -k time-change
+-a always,exit -F arch=b64 -S clock_settime -k time-change
+-a always,exit -F arch=b32 -S clock_settime -k time-change
+-w /etc/localtime -p wa -k time-change
+
+# Audit identity
+-w /etc/group -p wa -k identity
+-w /etc/passwd -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/security/opasswd -p wa -k identity
+
+# Audit hostname and locale
+a always,exit -F arch=b64 -S sethostname -S setdomainname -k system-locale
+-a always,exit -F arch=b32 -S sethostname -S setdomainname -k system-locale
+-w /etc/issue -p wa -k system-locale
+-w /etc/issue.net -p wa -k system-locale
+-w /etc/hosts -p wa -k system-locale
+-w /etc/sysconfig/network -p wa -k system-locale
+
+
+
 # Audit system events
--a always,exit -F arch=b32 -S acct -S reboot -S sched_setparam -S sched_setscheduler -S setrlimit -S swapon 
--a always,exit -F arch=b64 -S acct -S reboot -S sched_setparam -S sched_setscheduler -S setrlimit -S swapon 
+-a always,exit -F arch=b32 -S acct -S reboot -S sched_setparam -S sched_setscheduler -S setrlimit -S swapon
+-a always,exit -F arch=b64 -S acct -S reboot -S sched_setparam -S sched_setscheduler -S setrlimit -S swapon
 
 # Audit any link creation
 -a always,exit -F arch=b32 -S link -S symlink
@@ -273,91 +440,44 @@ cat <<EOF > /etc/audit/rules.d/audit.rules
 ## NIST 800-53 Requirements ##
 ##############################
 
-#2.6.2.4.1 Records Events that Modify Date and Time Information
--a always,exit -F arch=b32 -S adjtimex -S stime -S settimeofday -k time-change
--a always,exit -F arch=b32 -S clock_settime -k time-change
--a always,exit -F arch=b64 -S adjtimex -S settimeofday -k time-change
--a always,exit -F arch=b64 -S clock_settime -k time-change
--w /etc/localtime -p wa -k time-change
-
-#2.6.2.4.2 Record Events that Modify User/Group Information
--w /etc/group -p wa -k identity
--w /etc/passwd -p wa -k identity
--w /etc/gshadow -p wa -k identity
--w /etc/shadow -p wa -k identity
--w /etc/security/opasswd -p wa -k identity
--w /etc/sudoers
-
-#2.6.2.4.3 Record Events that Modify the Systems Network Environment
--a always,exit -F arch=b32 -S sethostname -S setdomainname -k audit_network_modifications
--a always,exit -F arch=b64 -S sethostname -S setdomainname -k audit_network_modifications
--w /etc/issue -p wa -k audit_network_modifications
--w /etc/issue.net -p wa -k audit_network_modifications
--w /etc/hosts -p wa -k audit_network_modifications
--w /etc/sysconfig/network -p wa -k audit_network_modifications
-
-#2.6.2.4.4 Record Events that Modify the System Mandatory Access Controls
--w /etc/selinux/ -p wa -k MAC-policy
-
 #2.6.2.4.5 Ensure auditd Collects Logon and Logout Events
 -w /var/log/faillog -p wa -k logins
--w /var/log/lastlog -p wa -k logins
 
-#2.6.2.4.6 Ensure auditd Collects Process and Session Initiation Information
--w /var/run/utmp -p wa -k session
--w /var/log/btmp -p wa -k session
--w /var/log/wtmp -p wa -k session
-
-#2.6.2.4.7 Ensure auditd Collects Discretionary Access Control Permission Modification Events
--a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -F auid>=1000 -F auid!=4294967295 -k perm_mod
--a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -F auid>=1000 -F auid!=4294967295 -k perm_mod
--a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F auid>=1000 -F auid!=4294967295 -k perm_mod
--a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -F auid>=1000 -F auid!=4294967295 -k perm_mod
--a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -F auid>=1000 -F auid!=4294967295 -k perm_mod
--a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F auid>=1000 -F auid!=4294967295 -k perm_mod
-
-#2.6.2.4.8 Ensure auditd Collects Unauthorized Access Attempts to Files (unsuccessful)
--a always,exit -F arch=b32 -S creat -S open -S openat -S open_by_handle_at -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access
--a always,exit -F arch=b32 -S creat -S open -S openat -S open_by_handle_at -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -k access
--a always,exit -F arch=b64 -S creat -S open -S openat -S open_by_handle_at -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access
--a always,exit -F arch=b64 -S creat -S open -S openat -S open_by_handle_at -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -k access
-
-#2.6.2.4.9 Ensure auditd Collects Information on the Use of Privileged Commands
--a always,exit -F path=/usr/sbin/semanage -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged-priv_change
--a always,exit -F path=/usr/sbin/setsebool -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged-priv_change
--a always,exit -F path=/usr/bin/chcon -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged-priv_change
--a always,exit -F path=/usr/sbin/restorecon -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged-priv_change
--a always,exit -F path=/usr/bin/userhelper -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged
--a always,exit -F path=/usr/bin/sudoedit -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged
--a always,exit -F path=/usr/libexec/pt_chown -F perm=x -F auid>=1000 -F auid!=4294967295 -F key=privileged
 EOF
-# Find All privileged commands and monitor them
+
+sed -i "1 i /var/log/boot.log" /etc/logrotate.d/syslog 			# CIS 5.3
+
+
+# Find and monitor additional privileged commands
 for PROG in `find / -xdev -type f -perm -4000 -o -type f -perm -2000 2>/dev/null`; do
-	echo "-a always,exit -F path=$PROG -F perm=x -F auid>=1000 -F auid!=4294967295 -k privileged"  >> /etc/audit/rules.d/audit.rules
+	fgrep -r "path=$PROG" /etc/audit/rules.d/
+	if [ $? -ne 0 ]; then
+		echo "-a always,exit -F path=$PROG -F perm=x -F auid>=1000 -F auid!=4294967295 -k privileged"  >> /etc/audit/rules.d/zzz-supplemental.rules
+	fi
 done
-cat <<EOF >> /etc/audit/rules.d/audit.rules
 
-#2.6.2.4.10 Ensure auditd Collects Information on Exporting to Media (successful)
--a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=4294967295 -k export
--a always,exit -F arch=b64 -S mount -F auid>=1000 -F auid!=4294967295 -k export
+# Sometimes the SSG leaves some rules in a file simply named ".rules".
+# This is also caused by the below mentioned "key" syntax mismatch.
+if [ -f /etc/audit/rules.d/.rules ]; then
+	# Some of the rules in the .rules file are invalid, this should
+	# be fixed in 0.1.34.
+	sed -i -e 's/EACCESS/EACCES/' /etc/audit/rules.d/.rules
+	sed -i -e 's/EPRM/EPERM/'     /etc/audit/rules.d/.rules
 
-#2.6.2.4.11 Ensure auditd Collects Files Deletion Events by User (successful and unsuccessful)
--a always,exit -F arch=b32 -S unlink -S rmdir -S unlinkat -S rename -S renameat -F auid>=1000 -F auid!=4294967295 -k delete
--a always,exit -F arch=b64 -S unlink -S rmdir -S unlinkat -S rename -S renameat -F auid>=1000 -F auid!=4294967295 -k delete
+	# Inconsistent syntax can lead to duplicate rules.  I'm told that:
+	# 'The "-F key=$key" is correct and should be the audit key syntax
+	# going forward. ... rather than moving backward to the -k syntax.'
+	# But, most of the existing rules use the "old" syntax as well as
+	# all of the STIG XCCDF content, so I'm normalizing that direction.
+	sed -i -e 's/-F key=/-k /'    /etc/audit/rules.d/.rules
+	sed -i -e 's/-F key=/-k /'    /etc/audit/rules.d/*.rules
 
-#2.6.2.4.12 Ensure auditd Collects System Administrator Actions
--w /etc/sudoers -p wa -k actions
-
-#2.6.2.4.13 Make the auditd Configuration Immutable
--w /sbin/insmod -p x -k modules
--w /sbin/rmmod -p x -k modules
--w /sbin/modprobe -p x -k modules
--a always,exit -F arch=b32 -S init_module -S delete_module -k modules
--a always,exit -F arch=b64 -S init_module -S delete_module -k modules
-
-#2.6.2.4.14 Make the auditd Configuration Immutable
--e 2
-EOF
+	# Some of the rules in the .rules file are duplicates (due to
+	# the above mentioned syntax mismatch).
+	sort /etc/audit/rules.d/.rules -o /etc/audit/rules.d/.rules
+	sort /etc/audit/rules.d/*.rules | comm -13 - /etc/audit/rules.d/.rules > /etc/audit/rules.d/ssg-orphaned.rules
+	rm /etc/audit/rules.d/.rules
+fi
 
 ########################################
 # Fix cron.allow
@@ -382,6 +502,15 @@ ln -sf /dev/null /etc/systemd/system/ctrl-alt-del.target
 # No Root Login to Console (use admin user)
 ########################################
 cat /dev/null > /etc/securetty
+
+## alternatively use CIS reqs
+## CIS 6.4
+#cp /etc/securetty /etc/securetty.orig
+##> /etc/securetty
+#cat << EOF >> /etc/securetty
+#console
+#tty1
+#EOF
 
 ########################################
 # Disable Interactive Shell (Timeout)
@@ -468,9 +597,13 @@ done
 ########################################
 # SSHD Hardening
 ########################################
+sshd_config='/etc/ssh/sshd_config'
+chown root:root ${sshd_config}							# CIS 6.2.3
+chmod 600 ${sshd_config}								# CIS 6.2.3
 sed -i '/Ciphers.*/d' /etc/ssh/ssh*config
 sed -i '/MACs.*/d' /etc/ssh/ssh*config
-sed -i '/Protocol.*/d' /etc/ssh/sshd_config
+sed -i "s/\#LogLevel/LogLevel/" ${sshd_config}			# CIS 6.2.2
+sed -i '/Protocol.*/d' /etc/ssh/sshd_config   			# CIS 6.2.1
 echo "Protocol 2" >> /etc/ssh/sshd_config
 echo "Ciphers aes128-ctr,aes192-ctr,aes256-ctr" >> /etc/ssh/ssh_config
 echo "Ciphers aes128-ctr,aes192-ctr,aes256-ctr" >> /etc/ssh/sshd_config
@@ -478,7 +611,7 @@ echo "MACs hmac-sha2-512,hmac-sha2-256" >> /etc/ssh/ssh_config
 echo "MACs hmac-sha2-512,hmac-sha2-256" >> /etc/ssh/sshd_config
 echo "PrintLastLog yes" >> /etc/ssh/sshd_config
 echo "AllowGroups sshusers" >> /etc/ssh/sshd_config
-echo "MaxAuthTries 3" >> /etc/ssh/sshd_config
+echo "MaxAuthTries 3" >> /etc/ssh/sshd_config  			# CIS 6.2.5
 echo "Banner /etc/issue" >> /etc/ssh/sshd_config
 echo "RhostsRSAAuthentication no" >> /etc/ssh/sshd_config
 echo "GSSAPIAuthentication no" >> /etc/ssh/sshd_config
@@ -487,6 +620,20 @@ echo "IgnoreUserKnownHosts yes" >> /etc/ssh/sshd_config
 echo "StrictModes yes" >> /etc/ssh/sshd_config
 echo "UsePrivilegeSeparation yes" >> /etc/ssh/sshd_config
 echo "Compression delayed" >> /etc/ssh/sshd_config
+##  CIS requirements
+echo "X11Forwarding no" >>  ${sshd_config}  			# CIS 6.2.4
+echo "IgnoreRhosts yes" >>  ${sshd_config} 				# CIS 6.2.6
+echo "HostbasedAuthentication no" >> ${sshd_config}		# CIS 6.2.7
+echo "PermitRootLogin no" >> ${sshd_config}				# CIS 6.2.8
+echo "PermitEmptyPasswords no" >> ${sshd_config}		# CIS 6.2.9
+echo "PermitUserEnvironment no" >> ${sshd_config}		# CIS 6.2.10
+#line_num=$(grep -n "^\# Ciphers and keying" ${sshd_config} | cut -d: -f1)
+##sed -i "${line_num} a Ciphers aes128-ctr,aes192-ctr,aes256-ctr" ${sshd_config}	# CIS 6.2.11
+#sed -i "${line_num} a Ciphers aes128-ctr,aes192-ctr,aes256-ctr,arcfour256,arcfour128" ${sshd_config}
+#sed -i "${line_num} a MACs hmac-sha1,umac-64@openssh.com,hmac-ripemd160" ${sshd_config}
+echo "ClientAliveInterval 900" >> ${sshd_config}		# CIS 6.2.12
+echo "ClientAliveCountMax 0" >> ${sshd_config}			# CIS 6.2.12
+echo "Banner /etc/issue.net"  >> ${sshd_config}   	 	# CIS 6.2.12
 if [ $(grep -c sshusers /etc/group) -eq 0 ]; then
 	/usr/sbin/groupadd sshusers &> /dev/null
 fi
@@ -501,17 +648,24 @@ ALL: 127.0.0.1 [::1]
 # Allow SSH (you can limit this further using IP addresses - e.g. 192.168.0.*)
 sshd: ALL
 EOF
-cat <<EOF >> /etc/hosts.deny
+cat <<EOF >> /etc/hosts.deny 	# CIS 4.5.4
 # Deny All by Default
 ALL: ALL
 EOF
+chown root:root /etc/hosts.deny			# CIS 4.5.5
+chmod 644 /etc/hosts.deny				# CIS 4.5.5
 
+chown root:root /etc/rsyslog.conf		# CIS 5.1.4
+chmod 600 /etc/rsyslog.conf				# CIS 5.1.4
+# CIS 5.1.3  Configure /etc/rsyslog.conf - This is environment specific
+# CIS 5.1.5  Configure rsyslog to Send Log to a Remote Log Host - This is environment specific
 
 ########################################
 # Filesystem Attributes
 #  CCE-26499-4,CCE-26720-3,CCE-26762-5,
 #  CCE-26778-1,CCE-26622-1,CCE-26486-1.
 #  CCE-27196-5
+# also CIS 1.1.6 + 1.1.14-1.1.16
 ########################################
 FSTAB=/etc/fstab
 SED=`which sed`
@@ -575,7 +729,7 @@ fi
 echo -e "tmpfs\t\t\t/dev/shm\t\ttmpfs\tnoexec,nosuid,nodev\t\t0 0" >> /etc/fstab
 
 ########################################
-# File Ownership 
+# File Ownership
 ########################################
 find / -nouser -print | xargs chown root
 find / -nogroup -print | xargs chown :root
@@ -599,6 +753,7 @@ touch /etc/modprobe.d/usgcb-blacklist.conf
 chmod 0644 /etc/modprobe.d/usgcb-blacklist.conf
 chcon 'system_u:object_r:modules_conf_t:s0' /etc/modprobe.d/usgcb-blacklist.conf
 
+# Disable mounting of unneeded filesystems CIS 1.1.18 - 1.1.24
 cat <<EOF > /etc/modprobe.d/usgcb-blacklist.conf
 # Disable Bluetooth
 install bluetooth /bin/true
@@ -653,7 +808,7 @@ automount=false
 automount-open=false
 autorun-never=true
 
-[org/gnome/desktop/notifications] 
+[org/gnome/desktop/notifications]
 show-in-lock-screen=false
 
 [org/gnome/desktop/privacy]
@@ -711,7 +866,7 @@ automount=false
 automount-open=false
 autorun-never=true
 
-[org.gnome.desktop.notifications] 
+[org.gnome.desktop.notifications]
 show-in-lock-screen=false
 
 [org.gnome.desktop.privacy]
@@ -760,28 +915,33 @@ fi
 ########################################
 # Kernel - Randomize Memory Space
 # CCE-27127-0, SC-30(2), 1.6.1
+# CIS 1.6.2
 ########################################
 echo "kernel.randomize_va_space = 2" >> /etc/sysctl.conf
 
 ########################################
 # Kernel - Accept Source Routed Packets
 # AC-4, 366, SRG-OS-000480-GPOS-00227
+# CIS 4.2.1
 ########################################
 echo "net.ipv6.conf.all.accept_source_route = 0" >> /etc/sysctl.conf
 
 #######################################
 # Kernel - Disable Redirects
+# CIS 4.2.2
 #######################################
 echo "net.ipv4.conf.default.accept_redirects = 0" >> /etc/sysctl.conf
 echo "net.ipv4.conf.all.accept_redirects = 0" >> /etc/sysctl.conf
 
 #######################################
 # Kernel - Disable ICMP Broadcasts
+# CIS 4.2.5
 #######################################
 echo "net.ipv4.icmp_echo_ignore_broadcasts = 1" >> /etc/sysctl.conf
 
 #######################################
 # Kernel - Disable Syncookies
+# CIS 4.2.8
 #######################################
 echo "net.ipv4.tcp_syncookies = 1" >> /etc/sysctl.conf
 
@@ -790,15 +950,46 @@ echo "net.ipv4.tcp_syncookies = 1" >> /etc/sysctl.conf
 #######################################
 echo "net.ipv4.tcp_timestamps = 0" >> /etc/sysctl.conf
 
+cat << EOF >> /etc/sysctl.conf
+fs.suid_dumpable = 0					# CIS 1.6.1
+#kernel.randomize_va_space = 2				# CIS 1.6.2!
+net.ipv4.ip_forward = 0					# CIS 4.1.1
+net.ipv4.conf.all.send_redirects = 0			# CIS 4.1.2
+net.ipv4.conf.default.send_redirects = 0		# CIS 4.1.2
+#net.ipv4.conf.all.accept_source_route = 0		# CIS 4.2.1 !
+#net.ipv4.conf.default.accept_source_route = 0		# CIS 4.2.1 !
+#net.ipv4.conf.all.accept_redirects = 0 			# CIS 4.2.2 !
+#net.ipv4.conf.default.accept_redirects = 0 		# CIS 4.2.2 !
+net.ipv4.conf.all.secure_redirects = 0 			# CIS 4.2.3
+net.ipv4.conf.default.secure_redirects = 0 		# CIS 4.2.3
+net.ipv4.conf.all.log_martians = 1 			# CIS 4.2.4
+net.ipv4.conf.default.log_martians = 1 			# CIS 4.2.4
+#net.ipv4.icmp_echo_ignore_broadcasts = 1		# CIS 4.2.5 !
+net.ipv4.icmp_ignore_bogus_error_responses = 1		# CIS 4.2.6
+net.ipv4.conf.all.rp_filter = 1				# CIS 4.2.7
+net.ipv4.conf.default.rp_filter = 1			# CIS 4.2.7
+#net.ipv4.tcp_syncookies = 1				# CIS 4.2.8 !
+net.ipv6.conf.all.accept_ra = 0				# CIS 4.4.1.1
+net.ipv6.conf.default.accept_ra = 0 			# CIS 4.4.1.1
+net.ipv6.conf.all.accept_redirect = 0			# CIS 4.4.1.2
+net.ipv6.conf.default.accept_redirect = 0		# CIS 4.4.1.2
+net.ipv6.conf.all.disable_ipv6 = 1			# CIS 4.4.2
+EOF
+
+echo umask 027 >> /etc/sysconfig/init			# CIS 3.1
+
+cd /usr/lib/systemd/system				# CIS 3.2
+rm default.target
+ln -s multi-user.target default.target
+
 ########################################
-# Disable SystemD Date Service 
+# Disable SystemD Date Service
 # Use (chrony or ntpd)
 ########################################
 timedatectl set-ntp false
 
-######################################## 
-# Disable Kernel Dump Service 
-######################################## 
-systemctl disable kdump.service 
+########################################
+# Disable Kernel Dump Service
+########################################
+systemctl disable kdump.service
 systemctl mask kdump.service
-
