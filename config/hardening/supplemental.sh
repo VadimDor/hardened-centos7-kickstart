@@ -942,7 +942,7 @@ echo "net.ipv4.icmp_echo_ignore_broadcasts = 1" >> /etc/sysctl.conf
 #######################################
 # Kernel - Disable Syncookies
 # CIS 4.2.8
-#######################################
+########################################
 echo "net.ipv4.tcp_syncookies = 1" >> /etc/sysctl.conf
 
 #######################################
@@ -975,6 +975,7 @@ net.ipv6.conf.all.accept_redirect = 0			# CIS 4.4.1.2
 net.ipv6.conf.default.accept_redirect = 0		# CIS 4.4.1.2
 net.ipv6.conf.all.disable_ipv6 = 1			# CIS 4.4.2
 EOF
+
 
 echo umask 027 >> /etc/sysconfig/init			# CIS 3.1
 
